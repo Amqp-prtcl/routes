@@ -74,7 +74,7 @@ func NewRouter(auth AuthCallback) *router {
 	}
 }
 
-func (r *router) ListenAndServe(addr string, auth func()) error {
+func (r *router) ListenAndServe(addr string) error {
 	return http.ListenAndServe(addr, r)
 }
 
