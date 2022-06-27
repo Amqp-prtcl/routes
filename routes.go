@@ -62,7 +62,7 @@ func MustNewRoute(method string, pattern string, AuthType int, handle HandlerFun
 	return route
 }
 
-type AuthCallback func(*http.Request, int, jwt.Token) (interface{}, bool)
+type AuthCallback func(*http.Request, int, jwt.Token) (*http.Cookie, interface{}, bool)
 
 type Router struct {
 	Routes         []*Route
@@ -122,12 +122,15 @@ func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		entity, ok := r.OnAuth(req, route.AuthType, getToken(req, r.AuthCookieName))
+		cookie, entity, ok := r.OnAuth(req, route.AuthType, getToken(req, r.AuthCookieName))
 		if !ok {
 			http.Redirect(w, req, RedirectOnAuthFailed, http.StatusSeeOther)
 			return
 		}
-
+		if cookie != nil {
+			cookie.Name = TokenCookieName
+			http.SetCookie(w, cookie)
+		}
 		route.Handler(w, req, entity, matches[1:])
 		return
 	}
