@@ -64,7 +64,7 @@ func MustNewRoute(method string, pattern string, AuthType int, handle HandlerFun
 
 type AuthCallback func(*http.Request, int, jwt.Token) (interface{}, bool)
 
-type router struct {
+type Router struct {
 	Routes         []*Route
 	OnAuth         AuthCallback
 	AuthCookieName string
@@ -72,20 +72,20 @@ type router struct {
 }
 
 // if auth callback is nil, router will respond to any request with a 500 Internal Server Error
-func NewRouter(auth AuthCallback) *router {
-	return &router{
+func NewRouter(auth AuthCallback) *Router {
+	return &Router{
 		Routes: []*Route{},
 		OnAuth: auth,
 		mu:     sync.RWMutex{},
 	}
 }
 
-func (r *router) ListenAndServe(addr string) error {
+func (r *Router) ListenAndServe(addr string) error {
 	return http.ListenAndServe(addr, r)
 }
 
 // panics if duplicate pattern and method
-func (r *router) AddRoute(route *Route) error {
+func (r *Router) AddRoute(route *Route) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for _, rou := range r.Routes {
@@ -97,13 +97,13 @@ func (r *router) AddRoute(route *Route) error {
 	return nil
 }
 
-func (r *router) MustAddRoute(route *Route) {
+func (r *Router) MustAddRoute(route *Route) {
 	if err := r.AddRoute(route); err != nil {
 		panic(err)
 	}
 }
 
-func (r *router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+func (r *Router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	var hasMatched bool
 	r.mu.RLock()
 	for _, route := range r.Routes {
