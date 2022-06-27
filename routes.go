@@ -2,6 +2,7 @@ package routes
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"regexp"
 	"sync"
@@ -9,10 +10,17 @@ import (
 	"github.com/Amqp-prtcl/jwt"
 )
 
+const HttpMethodAny = "ANY"
+
+var (
+	TokenCookieName      = "auth"
+	RedirectOnAuthFailed = "/login"
+)
+
 //token will be nil if auth cookie not present
 func getToken(r *http.Request, name string) jwt.Token {
 	for _, cookie := range r.Cookies() {
-		if cookie.Name == "auth" {
+		if cookie.Name == TokenCookieName {
 			return jwt.Token(cookie.Value)
 		}
 	}
@@ -63,10 +71,8 @@ type router struct {
 	mu             sync.RWMutex
 }
 
+// if auth callback is nil, router will respond to any request with a 500 Internal Server Error
 func NewRouter(auth AuthCallback) *router {
-	if auth == nil {
-		panic("nil auth callback")
-	}
 	return &router{
 		Routes: []*Route{},
 		OnAuth: auth,
@@ -79,15 +85,22 @@ func (r *router) ListenAndServe(addr string) error {
 }
 
 // panics if duplicate pattern and method
-func (r *router) AddRoute(route *Route) {
+func (r *router) AddRoute(route *Route) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for _, rou := range r.Routes {
 		if rou.Pattern.String() == route.Pattern.String() && rou.Method == route.Method {
-			panic("duplicate routes, pattern: " + route.Pattern.String() + ", method: " + route.Method)
+			return fmt.Errorf("duplicate routes, pattern: " + route.Pattern.String() + ", method: " + route.Method)
 		}
 	}
 	r.Routes = append(r.Routes, route)
+	return nil
+}
+
+func (r *router) MustAddRoute(route *Route) {
+	if err := r.AddRoute(route); err != nil {
+		panic(err)
+	}
 }
 
 func (r *router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
@@ -98,7 +111,7 @@ func (r *router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		if len(matches) == 0 {
 			continue
 		}
-		if route.Method != "ANY" && req.Method != route.Method {
+		if route.Method != HttpMethodAny && req.Method != route.Method {
 			hasMatched = true
 			continue
 		}
@@ -111,7 +124,7 @@ func (r *router) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 		entity, ok := r.OnAuth(req, route.AuthType, getToken(req, r.AuthCookieName))
 		if !ok {
-			http.Redirect(w, req, "/login", http.StatusSeeOther)
+			http.Redirect(w, req, RedirectOnAuthFailed, http.StatusSeeOther)
 			return
 		}
 
